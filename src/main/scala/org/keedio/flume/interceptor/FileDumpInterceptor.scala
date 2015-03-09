@@ -1,7 +1,7 @@
 package org.keedio.flume.interceptor
 
 import java.io.OutputStream
-import java.nio.file.{FileSystems, Files, Path}
+import java.nio.file.FileSystems
 import java.util
 
 import ch.qos.logback.classic.{Logger, LoggerContext}
@@ -9,42 +9,44 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.encoder.Encoder
 import ch.qos.logback.core.rolling.{SizeBasedTriggeringPolicy, FixedWindowRollingPolicy, RollingFileAppender}
+import ch.qos.logback.core.Appender
 import com.typesafe.scalalogging.slf4j.LazyLogging
+
+import org.slf4j.LoggerFactory
+
 import org.apache.flume.{Context, Event}
 import org.apache.flume.interceptor.Interceptor
 import org.apache.flume.serialization.{HeaderAndBodyTextEventSerializer, EventSerializer}
-import ch.qos.logback.core.Appender
-import org.slf4j.LoggerFactory
 import scala.collection.JavaConversions._
-
 
 
 /**
  * Simple Flume Interceptor that dumps the incoming
- * flow of events to an append-only file.
+ * flow of events to a log file.
  *
  * Created by luca on 10/2/15.
  */
+
 class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
+
   val ROOT_TMP_DIR = FileSystems.getDefault.getPath(System.getProperty("java.io.tmpdir"))
+  val FILELOGGER_APPENDER_NAME = "FILELOGGER"
+  private val flumeContext: Context = ctx
 
   private var outputStream: OutputStream = _
   private var serializer: EventSerializer = _
-  private var fileLogger :Logger = _
+  private var fileLogger: Logger = _
 
   /**
    * {@inheritdoc}
    */
   override def initialize(): Unit = {
+
+    initFileLogger match {
+      case (l, s) => fileLogger = l; outputStream = s
+    }
+
     val serBuilder = new HeaderAndBodyTextEventSerializer.Builder
-
-    val dumpFile :String = ctx.getString("dump.filename")
-    val maxFileSize = ctx.getString("dump.maxFileSize")
-    val maxBackups = ctx.getInteger("dump.maxBackups")
-
-    initFileLogger(dumpFile, maxFileSize, maxBackups)
-
-    // outputStream = Some(Files.newOutputStream(dumpFile.get, CREATE_NEW, APPEND))
     serializer = serBuilder.build(ctx, outputStream)
   }
 
@@ -52,16 +54,15 @@ class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
    * {@inheritdoc}
    */
   override def close(): Unit = {
-    fileLogger.detachAndStopAllAppenders
-    // outputStream.get.close()
+    // outputStream.close()
   }
 
   /**
    * {@inheritdoc}
    */
   override def intercept(event: Event): Event = {
-    // fileLogger.info(event.toString)
-    serializer.write(event)
+    fileLogger.info("headers: " + event.getHeaders.toString + " body: " + new String(event.getBody))
+    // serializer.write(event)
     event
   }
 
@@ -69,7 +70,7 @@ class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
    * {@inheritdoc}
    */
   override def intercept(events: util.List[Event]): util.List[Event] = {
-    events.foreach(intercept(_))
+    events.foreach(intercept)
     events
   }
 
@@ -77,43 +78,52 @@ class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
    * Creates a temp file located in the system-wide temp dir
    * @return
    */
-  // def createTmpFile : Path = Files.createTempFile(ROOT_TMP_DIR, "flume-dumpfile-", null)
 
-  def initFileLogger(dumpFile :String, maxFileSize :String = "100MB", maxBackups :Int = 10): Unit = {
-    val loggerContext = LoggerFactory.getILoggerFactory().asInstanceOf[LoggerContext]
+  def initFileLogger: (Logger, OutputStream) = {
+    val dumpFile: String = flumeContext.getString("dump.filename")
+    val maxFileSize = flumeContext.getString("dump.maxFileSize")
+    val maxBackups = flumeContext.getInteger("dump.maxBackups")
 
-    val rollingPolicy = new FixedWindowRollingPolicy
-    rollingPolicy.setMinIndex(1)
-    rollingPolicy.setMaxIndex(maxBackups)
-    rollingPolicy.start()
+    logger.debug("Building rolling file logger using: " + dumpFile + " " + maxFileSize + " " + maxBackups)
 
-    val triggeringPolicy = new SizeBasedTriggeringPolicy
-    triggeringPolicy.setMaxFileSize(maxFileSize)
-    triggeringPolicy.start()
+    val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
 
     val fileAppender = new RollingFileAppender
-    fileAppender.setName("fileLogger");
-    fileAppender.setContext(loggerContext);
-    fileAppender.setFile(dumpFile);
+    fileAppender.setContext(loggerContext)
+    fileAppender.setName(FILELOGGER_APPENDER_NAME)
+    fileAppender.setFile(dumpFile)
     fileAppender.setAppend(true)
-    fileAppender.setRollingPolicy(rollingPolicy)
+
+    val encoder = new PatternLayoutEncoder()
+    encoder.setContext(loggerContext)
+    encoder.setPattern("%msg%n")
+    encoder.start()
+
+    val rollingPolicy = new FixedWindowRollingPolicy
+    rollingPolicy.setContext(loggerContext)
+    rollingPolicy.setParent(fileAppender)
+    rollingPolicy.setFileNamePattern(dumpFile + "%i")
+    rollingPolicy.setMinIndex(1)
+    rollingPolicy.setMaxIndex(maxBackups)
+
+    val triggeringPolicy = new SizeBasedTriggeringPolicy
+    triggeringPolicy.setContext(loggerContext)
+    triggeringPolicy.setMaxFileSize(maxFileSize)
+
+    fileAppender.setEncoder(encoder.asInstanceOf[Encoder[Nothing]])
     fileAppender.setTriggeringPolicy(triggeringPolicy)
+    fileAppender.setRollingPolicy(rollingPolicy)
 
-    val encoder = new PatternLayoutEncoder();
-    encoder.setContext(loggerContext);
-    encoder.setPattern("%msg%n");
-    encoder.start();
+    fileLogger = LoggerFactory.getLogger("fileLogger").asInstanceOf[Logger]
+    fileLogger.setAdditive(true)
+    fileLogger.addAppender(fileAppender.asInstanceOf[Appender[ILoggingEvent]])
 
-    fileAppender.setEncoder(encoder.asInstanceOf[Encoder[Nothing]]);
-    fileAppender.start();
+    // TODO: check order
+    fileAppender.start()
+    rollingPolicy.start()
+    triggeringPolicy.start()
 
-    fileLogger = loggerContext.getLogger(classOf[org.keedio.flume.interceptor.FileDumpInterceptor])
-    fileLogger.addAppender(fileAppender.asInstanceOf[Appender[ILoggingEvent]]);
-
-    outputStream = fileAppender.getOutputStream
-
-    logger.info(s"Setting log for event dumping to ${dumpFile}")
-
+    (fileLogger, fileAppender.getOutputStream)
   }
 }
 
