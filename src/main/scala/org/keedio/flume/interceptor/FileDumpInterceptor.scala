@@ -102,7 +102,7 @@ class FileDumpInterceptor(ctx: Context) extends Interceptor {
 
     val encoder = new PatternLayoutEncoder()
     encoder.setContext(loggerContext)
-    encoder.setPattern("[%p] %logger - %caller{2} - %msg%n")
+    encoder.setPattern("%msg%n")
     encoder.start()
 
     val rollingPolicy = new FixedWindowRollingPolicy
