@@ -4,13 +4,12 @@ import java.io.OutputStream
 import java.nio.file.FileSystems
 import java.util
 
-import ch.qos.logback.classic.{Logger, LoggerContext}
+import ch.qos.logback.classic.{Level, Logger, LoggerContext}
 import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.encoder.Encoder
 import ch.qos.logback.core.rolling.{SizeBasedTriggeringPolicy, FixedWindowRollingPolicy, RollingFileAppender}
 import ch.qos.logback.core.Appender
-import com.typesafe.scalalogging.slf4j.LazyLogging
 
 import org.slf4j.LoggerFactory
 
@@ -27,7 +26,7 @@ import scala.collection.JavaConversions._
  * Created by luca on 10/2/15.
  */
 
-class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
+class FileDumpInterceptor(ctx: Context) extends Interceptor {
 
   val ROOT_TMP_DIR = FileSystems.getDefault.getPath(System.getProperty("java.io.tmpdir"))
   val FILELOGGER_APPENDER_NAME = "FILELOGGER"
@@ -61,7 +60,7 @@ class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
    * {@inheritdoc}
    */
   override def intercept(event: Event): Event = {
-    fileLogger.info("headers: " + event.getHeaders.toString + " body: " + new String(event.getBody))
+    fileLogger.trace("headers: " + event.getHeaders.toString + " body: " + new String(event.getBody))
     // serializer.write(event)
     event
   }
@@ -84,8 +83,15 @@ class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
     val maxFileSize = flumeContext.getString("dump.maxFileSize")
     val maxBackups = flumeContext.getInteger("dump.maxBackups")
 
-    logger.debug("Building rolling file logger using: " + dumpFile + " " + maxFileSize + " " + maxBackups)
+    // logger.debug("Building rolling file logger using: " + dumpFile + " " + maxFileSize + " " + maxBackups)
 
+    // Make sure rootLogger won't add our logger
+    val rootLogger = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).asInstanceOf[Logger]
+    rootLogger.setAdditive(false)
+    rootLogger.setLevel(Level.OFF)
+    rootLogger.detachAndStopAllAppenders()
+
+    // Create and start our file logger
     val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
 
     val fileAppender = new RollingFileAppender
@@ -96,7 +102,7 @@ class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
 
     val encoder = new PatternLayoutEncoder()
     encoder.setContext(loggerContext)
-    encoder.setPattern("%msg%n")
+    encoder.setPattern("[%p] %logger - %caller{2} - %msg%n")
     encoder.start()
 
     val rollingPolicy = new FixedWindowRollingPolicy
@@ -110,18 +116,19 @@ class FileDumpInterceptor(ctx: Context) extends Interceptor with LazyLogging {
     triggeringPolicy.setContext(loggerContext)
     triggeringPolicy.setMaxFileSize(maxFileSize)
 
-    fileAppender.setEncoder(encoder.asInstanceOf[Encoder[Nothing]])
-    fileAppender.setTriggeringPolicy(triggeringPolicy)
     fileAppender.setRollingPolicy(rollingPolicy)
+    fileAppender.setTriggeringPolicy(triggeringPolicy)
+    fileAppender.setEncoder(encoder.asInstanceOf[Encoder[Nothing]])
 
     fileLogger = LoggerFactory.getLogger("fileLogger").asInstanceOf[Logger]
-    fileLogger.setAdditive(true)
+    fileLogger.setAdditive(false)
+    fileLogger.setLevel(Level.TRACE)
     fileLogger.addAppender(fileAppender.asInstanceOf[Appender[ILoggingEvent]])
 
-    // TODO: check order
-    fileAppender.start()
+    // Start order not confirmed to be correct (no doc available)
     rollingPolicy.start()
     triggeringPolicy.start()
+    fileAppender.start()
 
     (fileLogger, fileAppender.getOutputStream)
   }
