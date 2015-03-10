@@ -47,7 +47,7 @@ class FileDumpInterceptorTest extends LazyLogging {
 
   @BeforeMethod
   def initAgent(): Unit = {
-    dumpFile = s"${System.getProperty("java.io.tmpdir")}filedumpinterceptortest"
+    dumpFile = s"${System.getProperty("java.io.tmpdir")}${File.separator}filedumpinterceptortest"
     logger.info("Log files: " + dumpFile)
 
     val properties = Map(
