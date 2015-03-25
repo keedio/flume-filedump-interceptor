@@ -6,7 +6,7 @@
 
     <groupId>org.keedio.flume.interceptor</groupId>
     <artifactId>flume-filedump-interceptor</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -15,6 +15,20 @@
         <scala.version>2.10.4</scala.version>
         <flume.version>1.5.2</flume.version>
     </properties>
+
+    <distributionManagement>
+        <repository>
+            <id>keedio-releases</id>
+            <name>Keedio Releases</name>
+            <url>http://jenkins.keedio.com:8081/nexus/content/repositories/releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>keedio-snapshots</id>
+            <name>Keedio Snapshots</name>
+            <url>http://jenkins.keedio.com:8081/nexus/content/repositories/snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
+
     <build>
 
         <plugins>
