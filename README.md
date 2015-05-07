@@ -27,6 +27,6 @@ a1.sources.r1.interceptors.i1.dump.maxFileSize = 10MB
 a1.sources.r1.interceptors.i1.dump.maxBackups = 10
 ```
 
-See [FileDumpInterceptorTest](./src/test/scala/org/keedio/flume/interceptor/FileDumpInterceptorTest) for an usage example.
+See [FileDumpInterceptorTest](./src/test/scala/org/keedio/flume/interceptor/FileDumpInterceptorTest.scala) for an usage example.
 
 Only useful for debugging purposes.
