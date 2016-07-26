@@ -6,14 +6,14 @@
 
     <groupId>org.keedio.flume.interceptor</groupId>
     <artifactId>flume-filedump-interceptor</artifactId>
-    <version>0.0.4</version>
+    <version>0.1.1</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.7</maven.compiler.source>
         <maven.compiler.target>1.7</maven.compiler.target>
         <scala.version>2.10.4</scala.version>
-        <flume.version>1.5.2</flume.version>
+        <flume.version>1.6.0</flume.version>
     </properties>
 
     <distributionManagement>
